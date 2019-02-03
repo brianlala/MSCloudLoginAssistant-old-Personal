@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    The Test-CloudLogin function is used to assist with logging in to various Microsoft Cloud services, such as Azure, SharePoint Online, and SharePoint PnP.
+    The Test-MSCloudLogin function is used to assist with logging in to various Microsoft Cloud services, such as Azure, SharePoint Online, and SharePoint PnP.
 .EXAMPLE
-    Test-CloudLogin -Platform AzureAD -UseMFA
+    Test-MSCloudLogin -Platform AzureAD -UseMFA
 .EXAMPLE
-    Test-CloudLogin -Platform PnP
+    Test-MSCloudLogin -Platform PnP
 .PARAMETER Platform
     The Platform parameter specifies which cloud service for which we are testing the login state. Possible values are Azure, AzureAD, SharePointOnline, ExchangeOnline, MSOnline, and PnP.
 .PARAMETER UseMFA
@@ -12,10 +12,10 @@
 .NOTES
     Created & maintained by Brian Lalancette (@brianlala), 2019.
 .LINK
-    https://github.com/brianlala/Test-MSCloudLogin
+    https://github.com/brianlala/MSCloudLoginAssistant
     #>
 
-function Test-CloudLogin
+function Test-MSCloudLogin
 {
     [CmdletBinding()]
     param
@@ -161,7 +161,7 @@ function Test-AzureADLogin
     Write-Debug -Message "`$aadLoginSucceeded is $(Get-Variable -Name aadLoginSucceeded -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
     if (!$aadLoginSucceeded)
     {
-        Test-CloudLogin -platform "AzureAD" @useMFASwitch
+        Test-MSCloudLogin -platform "AzureAD" @useMFASwitch
     }
     else
     {
@@ -191,7 +191,7 @@ function Test-AzLogin
     $checkForMultiSubscriptions = $true
     if (!$azLoginSucceeded)
     {
-        Test-CloudLogin -Platform "Azure" @useMFASwitch
+        Test-MSCloudLogin -Platform "Azure" @useMFASwitch
     }
     else
     {
