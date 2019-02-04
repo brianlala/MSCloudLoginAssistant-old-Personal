@@ -21,7 +21,7 @@ function Test-MSCloudLogin
     param
         (
             [Parameter(Mandatory=$true)]
-            [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","MSOnline","PnP")]
+            [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","MSOnline","PnP","MicrosoftTeams")]
             $Platform,
             [Parameter(Mandatory=$false)]
             [switch]
@@ -35,6 +35,7 @@ function Test-MSCloudLogin
         "ExchangeOnline" {$testCmdlet = "Get-Mailbox"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-AzureAD"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "exo"}
         "MSOnline" {$testCmdlet = "Get-MsolUser"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-MsolService"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "msol"}
         "PnP" {Get-SPOAdminUrl; $testCmdlet = "Get-PnPSite"; $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system"; $connectCmdlet = "Connect-PnPOnline"; $connectCmdletArgs = "-Url $(($global:AdminUrl).Replace('-admin','')) -Credentials `$global:o365Credentials"; $variablePrefix = "pnp"}
+        "MicrosoftTeams" {$testCmdlet = "Get-Team"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-MicrosoftTeams"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "teams"}
     }
 
     New-Variable -Name $variablePrefix"LoginSucceeded" -Value $false -Scope Global -Option AllScope -Force
@@ -62,7 +63,9 @@ function Test-MSCloudLogin
                 # Only prompt for Windows-style credentials if we haven't explicitly specified multi-factor authentication
                 if (($null -eq $global:o365Credentials) -and (!$UseMFA))
                 {
-                    $global:o365Credentials = Get-O365Credentials
+                    # Try to retrieve the current user principal name
+                    $upn = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
+                    $global:o365Credentials = Get-O365Credentials -Username $upn
                     Write-Verbose -Message " - Will attempt to use credential for `"$($global:o365Credentials.UserName)`"..."
                 }
                 Write-Host -ForegroundColor Cyan " - Prompting for $Platform credentials..."
