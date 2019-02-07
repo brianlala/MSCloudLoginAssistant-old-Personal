@@ -19,30 +19,39 @@ function Test-MSCloudLogin
 {
     [CmdletBinding()]
     param
-        (
-            [Parameter(Mandatory=$true)]
-            [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","MSOnline","PnP","MicrosoftTeams")]
-            $Platform,
-            [Parameter(Mandatory=$false)]
-            [switch]
-            $UseMFA
-        )
+    (
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","SecurityComplianceCenter","MSOnline","PnP","MicrosoftTeams")]
+        $Platform,
+        [Parameter(Mandatory=$false)]
+        [switch]
+        $UseMFA
+    )
+    if ($UseMFA)
+    {
+        $UseMFASwitch = @{UseMFA = $true}
+    }
+    else
+    {
+        $UseMFASwitch = @{}
+    }
     switch ($Platform)
     {
         "Azure" {$testCmdlet = "Get-AzResource"; $exceptionStringMFA = "AADSTS50079"; $connectCmdlet = "Connect-AzAccount"; $variablePrefix = "az"}
         "AzureAD" {$testCmdlet = "Get-AzureADUser"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-AzureAD"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "aad"}
-        "SharePointOnline" {Get-SPOAdminUrl; $testCmdlet = "Get-SPOSite"; $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system"; $connectCmdlet = "Connect-SPOService"; $connectCmdletArgs = "-Url $global:AdminUrl -Credential `$global:o365Credentials"; $variablePrefix = "spo"}
+        "SharePointOnline" {Get-SPOAdminUrl @useMFASwitch; $testCmdlet = "Get-SPOSite"; $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system"; $connectCmdlet = "Connect-SPOService"; $connectCmdletArgs = "-Url $global:AdminUrl -Credential `$global:o365Credentials"; if ($UseMFA) {$connectCmdletArgs = $connectCmdletArgs.Replace("-Credential `$global:o365Credentials","")}; $variablePrefix = "spo"}
         "ExchangeOnline" {$testCmdlet = "Get-Mailbox"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-EXOPSSession"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "exo"}
+        'SecurityComplianceCenter' {$testCmdlet = "<TODO>"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-IPPSSession"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "scc"}
         "MSOnline" {$testCmdlet = "Get-MsolUser"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-MsolService"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "msol"}
-        "PnP" {Get-SPOAdminUrl; $testCmdlet = "Get-PnPSite"; $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system"; $connectCmdlet = "Connect-PnPOnline"; $connectCmdletArgs = "-Url $(($global:AdminUrl).Replace('-admin','')) -Credentials `$global:o365Credentials"; $variablePrefix = "pnp"}
+        "PnP" {Get-SPOAdminUrl @useMFASwitch; $testCmdlet = "Get-PnPSite"; $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system"; $connectCmdlet = "Connect-PnPOnline"; $connectCmdletArgs = "-TenantAdminUrl $global:AdminUrl -Url $(($global:AdminUrl).Replace('-admin','')) -Credentials `$global:o365Credentials"; if ($UseMFA) {$connectCmdletArgs = $connectCmdletArgs.Replace("-Credentials `$global:o365Credentials","-UseWebLogin")}; $variablePrefix = "pnp"}
         "MicrosoftTeams" {$testCmdlet = "Get-Team"; $exceptionStringMFA = "AADSTS"; $connectCmdlet = "Connect-MicrosoftTeams"; $connectCmdletArgs = "-Credential `$global:o365Credentials"; $variablePrefix = "teams"}
     }
 
     New-Variable -Name $variablePrefix"LoginSucceeded" -Value $false -Scope Global -Option AllScope -Force
-    Write-Debug -Message `$$variablePrefix"LoginSucceeded is $(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
+    Write-Debug -Message `$$variablePrefix"LoginSucceeded is '$(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
     try
     {
-        Write-Verbose -Message " - Checking $Platform login..."
+        Write-Verbose -Message "Checking $Platform login..."
         # Run a simple command to check if we are logged in
         Invoke-Expression "$testCmdlet -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null"
         if ($? -eq $false)
@@ -51,7 +60,7 @@ function Test-MSCloudLogin
         }
         else
         {
-            Write-Verbose -Message " - You are already logged in to $Platform."
+            Write-Verbose -Message "You are already logged in to $Platform."
         }
     }
     catch
@@ -66,10 +75,10 @@ function Test-MSCloudLogin
                     # Try to retrieve the current user principal name
                     $upn = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
                     $global:o365Credentials = Get-O365Credentials -Username $upn
-                    Write-Verbose -Message " - Will attempt to use credential for `"$($global:o365Credentials.UserName)`"..."
+                    Write-Verbose -Message "Will attempt to use credential for `"$($global:o365Credentials.UserName)`"..."
                 }
                 Write-Host -ForegroundColor Cyan " - Prompting for $Platform credentials..."
-                Write-Verbose -Message " - Running '$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err'"
+                Write-Verbose -Message "Running '$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err'"
                 Invoke-Expression "$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err" # | Out-Null"
                 if ($? -eq $false -or $err)
                 {
@@ -78,7 +87,7 @@ function Test-MSCloudLogin
                 else
                 {
                     New-Variable -Name $variablePrefix"LoginSucceeded" -Value $true -Scope Global -Option AllScope -Force
-                    Write-Debug -Message `$$variablePrefix"LoginSucceeded is $(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
+                    Write-Debug -Message `$$variablePrefix"LoginSucceeded is now '$(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
                 }
             }
             catch
@@ -93,12 +102,13 @@ function Test-MSCloudLogin
                 }
                 elseif ($_.Exception -like "*$exceptionStringMFA*" -or $_.Exception -like "*Sequence contains no elements*")
                 {
-                    Write-Verbose -Message " - Using existing credentials failed (possibly due to MFA or Live ID); prompting for fresh credentials..."
+                    Write-Verbose -Message "Using existing credentials failed (possibly due to MFA or Live ID); prompting for fresh credentials..."
                     try
                     {
-                        # Remove the credential info from the arguments string and try again
+                        # Remove the credential info from the arguments string and try again. Note that they could be either '-Credential' or '-Credentials' so we need to look for and replace both patterns
                         $connectCmdletArgs = $connectCmdletArgs.Replace('-Credential $global:o365Credentials','')
-                        Write-Debug -Message "`$connectCmdletArgs is $connectCmdletArgs"
+                        $connectCmdletArgs = $connectCmdletArgs.Replace('-Credentials $global:o365Credentials','')
+                        Write-Debug -Message "`$connectCmdletArgs is now '$connectCmdletArgs'"
                         Invoke-Expression "$connectCmdlet -ErrorAction Stop $connectCmdletArgs | Out-Null"
                         if ($? -eq $false)
                         {
@@ -107,7 +117,7 @@ function Test-MSCloudLogin
                         else
                         {
                             New-Variable -Name $variablePrefix"LoginSucceeded" -Value $true -Scope Global -Option AllScope -Force
-                            Write-Debug $variablePrefix"LoginSucceeded is $(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
+                            Write-Debug $variablePrefix"LoginSucceeded is now '$(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
                         }
                     }
                     catch
@@ -161,7 +171,7 @@ function Test-AzureADLogin
     {
         $UseMFASwitch = @{}
     }
-    Write-Debug -Message "`$aadLoginSucceeded is $(Get-Variable -Name aadLoginSucceeded -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
+    Write-Debug -Message "`$aadLoginSucceeded is '$(Get-Variable -Name aadLoginSucceeded -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
     if (!$aadLoginSucceeded)
     {
         Test-MSCloudLogin -platform "AzureAD" @useMFASwitch
@@ -190,7 +200,7 @@ function Test-AzLogin
     {
         $UseMFASwitch = @{}
     }
-    Write-Debug -Message "`$azLoginSucceeded is $(Get-Variable -Name azLoginSucceeded -ValueOnly -Scope Global -ErrorAction SilentlyContinue)."
+    Write-Debug -Message "`$azLoginSucceeded is '$(Get-Variable -Name azLoginSucceeded -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
     $checkForMultiSubscriptions = $true
     if (!$azLoginSucceeded)
     {
@@ -198,12 +208,12 @@ function Test-AzLogin
     }
     else
     {
-        Write-Verbose -Message " - Already logged into Azure."
+        Write-Verbose -Message "Already logged into Azure."
         $checkForMultiSubscriptions = $false
     }
     if ($azLoginSucceeded -and $checkForMultiSubscriptions)
     {
-        Write-Verbose -Message " - Successfully logged in to Azure."
+        Write-Verbose -Message "Successfully logged in to Azure."
         [array]$subscriptions = Get-AzSubscription -WarningAction Continue
         # Prompt for a subscription in case we have more than one
         if ($subscriptions.Count -gt 1)
@@ -243,8 +253,22 @@ function Get-O365Credentials
 function Get-SPOAdminUrl
 {
     [CmdletBinding()]
-    param ()
-    Test-AzureADLogin
+    param
+    (
+        [Parameter(Mandatory=$false)]
+        [switch]
+        $UseMFA
+    )
+    if ($UseMFA)
+    {
+        $UseMFASwitch = @{UseMFA = $true}
+    }
+    else
+    {
+        $UseMFASwitch = @{}
+    }
+    Write-Verbose -Message "Connection to Azure AD is required to automatically determine SharePoint Online admin URL..."
+    Test-AzureADLogin @useMFASwitch
     Write-Verbose -Message "Getting SharePoint Online admin URL..."
     $defaultDomain = Get-AzureADDomain | Where-Object {$_.Name -like "*.onmicrosoft.com" -and $_.IsInitial -eq $true} # We don't use IsDefault here because the default could be a custom domain
     $global:tenantName = $defaultDomain[0].Name -replace ".onmicrosoft.com",""
