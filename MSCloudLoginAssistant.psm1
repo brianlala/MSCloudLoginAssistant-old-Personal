@@ -156,26 +156,33 @@ function Test-MSCloudLogin
                 # Only prompt for Windows-style credentials if we haven't explicitly specified multi-factor authentication and we don't already have a credential
                 if (($null -eq $global:o365Credential) -and (!$UseMFA))
                 {
-                    if ([string]::IsNullOrEmpty($UserName))
+                    # Try to call the connect cmdlet with the reveived Credentials first
+                    Invoke-Expression "$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err" # | Out-Null"
+                    if ($? -eq $false -or $err)
                     {
-                        # Try to retrieve the current user principal name
-                        $UserName = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
+                        if ([string]::IsNullOrEmpty($UserName))
+                        {
+                            # Try to retrieve the current user principal name
+                            $UserName = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
+                        }
+
+                        $global:o365Credential = Get-O365Credential -Username $UserName
+                        Write-Verbose -Message "Will attempt to use credential for `"$($global:o365Credential.UserName)`"..."
+                        Write-Host -ForegroundColor Cyan " - Prompting for $Platform credentials..."
+                        Write-Verbose -Message "Running '$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err'"
+                        Invoke-Expression "$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err" # | Out-Null"
+                        if ($? -eq $false -or $err)
+                        {
+                            throw
+                        }
+                        else
+                        {
+                            New-Variable -Name $variablePrefix"LoginSucceeded" -Value $true -Scope Global -Option AllScope -Force
+                            Write-Debug -Message `$$variablePrefix"LoginSucceeded is now '$(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
+                        }
                     }
-                    $global:o365Credential = Get-O365Credential -Username $UserName
-                    Write-Verbose -Message "Will attempt to use credential for `"$($global:o365Credential.UserName)`"..."
                 }
-                Write-Host -ForegroundColor Cyan " - Prompting for $Platform credentials..."
-                Write-Verbose -Message "Running '$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err'"
-                Invoke-Expression "$connectCmdlet -ErrorAction Stop $connectCmdletArgs -ErrorVariable `$err" # | Out-Null"
-                if ($? -eq $false -or $err)
-                {
-                    throw
-                }
-                else
-                {
-                    New-Variable -Name $variablePrefix"LoginSucceeded" -Value $true -Scope Global -Option AllScope -Force
-                    Write-Debug -Message `$$variablePrefix"LoginSucceeded is now '$(Get-Variable -Name $($variablePrefix+"LoginSucceeded") -ValueOnly -Scope Global -ErrorAction SilentlyContinue)'."
-                }
+                
             }
             catch
             {
