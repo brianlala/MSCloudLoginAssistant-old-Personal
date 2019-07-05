@@ -65,11 +65,11 @@ function Test-MSCloudLogin
         }
         "SharePointOnline"
         {
-            Get-SPOAdminUrl @useMFASwitch;
+            $global:spoAdminUrl = Get-SPOAdminUrl @useMFASwitch;
             $testCmdlet = "Get-SPOSite";
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-SPOService";
-            $connectCmdletArgs = "-Url $global:AdminUrl -Credential `$o365Credential";
+            $connectCmdletArgs = "-Url $global:spoAdminUrl -Credential `$o365Credential";
             $connectCmdletMfaRetryArgs = $connectCmdletArgs.Replace("-Credential `$o365Credential","");
             if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
             $variablePrefix = "spo"
@@ -108,11 +108,11 @@ function Test-MSCloudLogin
         }
         "PnP"
         {
-            Get-SPOAdminUrl @useMFASwitch;
+            $global:spoAdminUrl = Get-SPOAdminUrl @useMFASwitch;
             $testCmdlet = "Get-PnPSite";
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-PnPOnline";
-            $connectCmdletArgs = "-TenantAdminUrl $global:AdminUrl -Url $(($global:AdminUrl).Replace('-admin','')) -Credentials `$o365Credential";
+            $connectCmdletArgs = "-TenantAdminUrl $global:spoAdminUrl -Url $(($global:spoAdminUrl).Replace('-admin','')) -Credentials `$o365Credential";
             $connectCmdletMfaRetryArgs = $connectCmdletArgs.Replace("-Credentials `$o365Credential","-UseWebLogin");
             if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
             $variablePrefix = "pnp"
@@ -337,6 +337,7 @@ function Get-O365Credential
 function Get-SPOAdminUrl
 {
     [CmdletBinding()]
+    [OutputType([System.String])]
     param
     (
         [Parameter(Mandatory=$false)]
@@ -355,7 +356,8 @@ function Get-SPOAdminUrl
     Test-AzureADLogin @useMFASwitch
     Write-Verbose -Message "Getting SharePoint Online admin URL..."
     $defaultDomain = Get-AzureADDomain | Where-Object {$_.Name -like "*.onmicrosoft.com" -and $_.IsInitial -eq $true} # We don't use IsDefault here because the default could be a custom domain
-    $global:tenantName = $defaultDomain[0].Name -replace ".onmicrosoft.com",""
-    $global:AdminUrl = "https://$global:tenantName-admin.sharepoint.com"
-    Write-Verbose -Message "SharePoint Online admin URL is $global:AdminUrl"
+    $tenantName = $defaultDomain[0].Name -replace ".onmicrosoft.com",""
+    $spoAdminUrl = "https://$tenantName-admin.sharepoint.com"
+    Write-Verbose -Message "SharePoint Online admin URL is $spoAdminUrl"
+    return $spoAdminUrl
 }
