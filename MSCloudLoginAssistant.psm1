@@ -23,7 +23,10 @@ function Test-MSCloudLogin
         $Platform,
         [Parameter(Mandatory=$false)]
         [System.String]
-        $UserName
+        $UserName,
+        [Parameter(Mandatory=$false)]
+        [System.Management.Automation.PSCredential]
+        $o365Credential = $o365Credential
     )
     switch ($Platform)
     {
