@@ -22,66 +22,59 @@ function Test-MSCloudLogin
     (
         [Parameter(Mandatory=$true)]
         [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","SecurityComplianceCenter","MSOnline","PnP","MicrosoftTeams")]
+        [System.String]
         $Platform,
-        [Parameter(Mandatory=$false)]
-        [switch]
-        $UseMFA,
-        [Parameter(Mandatory=$false)]
+
+        [Parameter()]
         [System.String]
         $UserName,
-        [Parameter(Mandatory=$false)]
+
+        [Parameter()]
+        [System.String]
+        $ConnectionUrl,
+
+        [Parameter()]
         [System.Management.Automation.PSCredential]
-        $o365Credential
+        $O365Credential
     )
-    if ($UseMFA)
-    {
-        $UseMFASwitch = @{UseMFA = $true}
-    }
-    else
-    {
-        $UseMFASwitch = @{}
-    }
     switch ($Platform)
     {
-        "Azure"
+        'Azure'
         {
             $testCmdlet = "Get-AzResource";
             $exceptionStringMFA = "AADSTS";
             $connectCmdlet = "Connect-AzAccount";
             $connectCmdletArgs = "-Credential `$global:o365Credential";
             $connectCmdletMfaRetryArgs = "";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
+            $connectCmdletArgs = $connectCmdletMfaRetryArgs;
             $variablePrefix = "az"
         }
-        "AzureAD"
+        'AzureAD'
         {
             $testCmdlet = "Get-AzureADUser";
             $exceptionStringMFA = "AADSTS";
             $connectCmdlet = "Connect-AzureAD";
             $connectCmdletArgs = "-Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = "-AccountId `$o365Credential.UserName";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
             $variablePrefix = "aad"
         }
-        "SharePointOnline"
+        'SharePointOnline'
         {
             $global:spoAdminUrl = Get-SPOAdminUrl @useMFASwitch;
             $testCmdlet = "Get-SPOSite";
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-SPOService";
             $connectCmdletArgs = "-Url $global:spoAdminUrl -Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = $connectCmdletArgs.Replace("-Credential `$o365Credential","");
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
+            $connectCmdletArgs = $connectCmdletArgs.Replace("-Credential `$o365Credential","");
             $variablePrefix = "spo"
         }
-        "ExchangeOnline"
+        'ExchangeOnline'
         {
             $testCmdlet = "Get-Mailbox";
             $exceptionStringMFA = "AADSTS";
             $connectCmdlet = "Connect-EXOPSSession";
             $connectCmdletArgs = "-Credential `$o365Credential";
             $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
+            $connectCmdletArgs = $connectCmdletMfaRetryArgs;
             $variablePrefix = "exo"
         }
         'SecurityComplianceCenter'
@@ -93,31 +86,34 @@ function Test-MSCloudLogin
             $connectCmdletArgs = "-Credential `$o365Credential";
             ##if ($UseMFA) {$connectCmdletArgs = $connectCmdletArgs.Replace("-Credential `$o365Credential","-UserPrincipalName `$o365Credential.UserName")};
             $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
+            $connectCmdletArgs = $connectCmdletMfaRetryArgs;
             $variablePrefix = "scc"
         }
-        "MSOnline"
+        'MSOnline'
         {
             $testCmdlet = "Get-MsolUser";
             $exceptionStringMFA = "AADSTS";
             $connectCmdlet = "Connect-MsolService";
             $connectCmdletArgs = "-Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = "";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
             $variablePrefix = "msol"
         }
-        "PnP"
+        'PnP'
         {
-            $global:spoAdminUrl = Get-SPOAdminUrl @useMFASwitch;
+            if ($null -eq $ConnectionUrl)
+            {
+                $global:spoAdminUrl = Get-SPOAdminUrl @useMFASwitch;
+            }
+            else
+            {
+                $global:spoAdminUrl = $ConnectionUrl
+            }
             $testCmdlet = "Get-PnPSite";
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-PnPOnline";
             $connectCmdletArgs = "-TenantAdminUrl $global:spoAdminUrl -Url $(($global:spoAdminUrl).Replace('-admin','')) -Credentials `$o365Credential";
-            $connectCmdletMfaRetryArgs = $connectCmdletArgs.Replace("-Credentials `$o365Credential","-UseWebLogin");
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
             $variablePrefix = "pnp"
         }
-        "MicrosoftTeams"
+        'MicrosoftTeams'
         {
             # Need to force-import this for some reason as of 1.0.0
             Import-Module MicrosoftTeams -Force
@@ -126,7 +122,7 @@ function Test-MSCloudLogin
             $connectCmdlet = "Connect-MicrosoftTeams";
             $connectCmdletArgs = "-Credential `$o365Credential";
             $connectCmdletMfaRetryArgs = "-AccountId `$o365Credential.UserName";
-            if ($UseMFA) {$connectCmdletArgs = $connectCmdletMfaRetryArgs};
+            $connectCmdletArgs = $connectCmdletMfaRetryArgs;
             $variablePrefix = "teams"
         }
     }
