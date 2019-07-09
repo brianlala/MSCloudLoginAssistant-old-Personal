@@ -22,9 +22,6 @@ function Test-MSCloudLogin
         [ValidateSet("Azure","AzureAD","SharePointOnline","ExchangeOnline","SecurityComplianceCenter","MSOnline","PnP","MicrosoftTeams")]
         $Platform,
         [Parameter(Mandatory=$false)]
-        [System.String]
-        $UserName,
-        [Parameter(Mandatory=$false)]
         [System.Management.Automation.PSCredential]
         $o365Credential = $o365Credential
     )
@@ -134,12 +131,7 @@ function Test-MSCloudLogin
                 # Only prompt for Windows-style credentials if we haven't explicitly specified multi-factor authentication and we don't already have a credential
                 if ($null -eq $global:o365Credential)
                 {
-                    if ([string]::IsNullOrEmpty($UserName))
-                    {
-                        # Try to retrieve the current user principal name
-                        $UserName = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
-                    }
-                    $global:o365Credential = Get-O365Credential -Username $UserName
+                    $global:o365Credential = Get-O365Credential
                     Write-Verbose -Message "Will attempt to use credential for `"$($global:o365Credential.UserName)`"..."
                 }
                 Write-Host -ForegroundColor Cyan " - Prompting for $Platform credentials..."
@@ -278,15 +270,9 @@ function Get-O365Credential
     [CmdletBinding()]
     param
     (
-        [Parameter(Mandatory=$false)]
-        [String]$Username
     )
-    if (!([string]::IsNullOrEmpty($Username)))
-    {
-        $userNameParameter = @{Username = $Username}
-    }
     Write-Host -ForegroundColor Cyan " - Prompting for MS Online credentials..."
-    $o365Credential = Get-Credential -Message "Please enter your credentials for MS Online Services" @userNameParameter
+    $o365Credential = Get-Credential -Message "Please enter your credentials for MS Online Services"
     return $o365Credential
 }
 function Get-SPOAdminUrl
