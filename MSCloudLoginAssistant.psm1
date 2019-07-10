@@ -131,7 +131,7 @@ function Test-MSCloudLogin
         elseif ($Platform -eq "PnP")
         {
             $CurrentPnPConnection = (Get-PnPConnection).Url
-            if ($CurrentUrl -ne $CurrentPnPConnection)
+            if ($ConnectionUrl -ne $CurrentPnPConnection)
             {
                 throw "PnP requires you to reconnect to new location using $connectCmdlet"
             }
