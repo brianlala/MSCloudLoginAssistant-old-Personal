@@ -265,6 +265,17 @@ function Test-AzLogin
     }
 }
 
+function Get-O365Credential
+{
+    [CmdletBinding()]
+    param
+    (
+    )
+    Write-Host -ForegroundColor Cyan " - Prompting for MS Online credentials..."
+    $o365Credential = Get-Credential -Message "Please enter your credentials for MS Online Services"
+    return $o365Credential
+}
+
 function Get-SPOAdminUrl
 {
     [CmdletBinding()]
