@@ -48,7 +48,7 @@ function Test-MSCloudLogin
             $exceptionStringMFA = "AADSTS";
             $connectCmdlet = "Connect-AzureAD";
             $connectCmdletArgs = "-Credential `$O365Credential";
-            $connectCmdletMfaRetryArgs = ""
+            $connectCmdletMfaRetryArgs = "-AccountId `$O365Credential.UserName"
             $variablePrefix = "aad"
         }
         'SharePointOnline'
@@ -65,6 +65,7 @@ function Test-MSCloudLogin
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-SPOService";
             $connectCmdletArgs = "-Url $global:spoAdminUrl -Credential `$O365Credential";
+            $connectCmdletMfaRetryArgs = ""
             $variablePrefix = "spo"
         }
         'ExchangeOnline'
@@ -74,7 +75,6 @@ function Test-MSCloudLogin
             $connectCmdlet = "Connect-EXOPSSession";
             $connectCmdletArgs = "-Credential `$o365Credential";
             $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            $connectCmdletArgs = $connectCmdletMfaRetryArgs;
             $variablePrefix = "exo"
         }
         'SecurityComplianceCenter'
@@ -102,6 +102,7 @@ function Test-MSCloudLogin
             $exceptionStringMFA = "sign-in name or password does not match one in the Microsoft account system";
             $connectCmdlet = "Connect-PnPOnline";
             $connectCmdletArgs = "-Url $ConnectionUrl -Credentials `$O365Credential";
+            $connectCmdletMfaRetryArgs = ""
             $variablePrefix = "pnp"
         }
         'MicrosoftTeams'
@@ -175,6 +176,7 @@ function Test-MSCloudLogin
                 elseif ($_.Exception -like "*$exceptionStringMFA*" -or $_.Exception -like "*Sequence contains no elements*")
                 {
                     Write-Verbose -Message "The specified user is using Multi-Factor Authentication. You are required to re-enter credentials."
+                    Write-Host -ForegroundColor Green "    Prompting for credentials with MFA for $Platform"
                     try
                     {
                         Write-Debug -Message "Replacing `$connectCmdletArgs with '$connectCmdletMfaRetryArgs'"
@@ -219,7 +221,7 @@ function Test-MSCloudLogin
     {
         if (Get-Variable -Name $variablePrefix"LoginSucceeded" -ValueOnly -Scope "Global")
         {
-            Write-Verbose " - Successfully logged in to $Platform."
+            Write-Verbose -Message " - Successfully logged in to $Platform."
         }
     }
 }
