@@ -79,13 +79,23 @@ function Test-MSCloudLogin
         }
         'SecurityComplianceCenter'
         {
-            # TODO!
-            $testCmdlet = "Get-RetentionCompliancePolicy";
-            $exceptionStringMFA = "AADSTS";
-            $connectCmdlet = "Connect-IPPSSession";
-            $connectCmdletArgs = "-Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            $variablePrefix = "scc"
+            $Global:SessionSecurityCompliance = Get-PSSession | Where-Object{$_.ComputerName -like "*.ps.compliance.protection.outlook.com"}
+            if ($null -eq $Global:SessionSecurityCompliance)
+            {
+                Write-Verbose -Message "Session to Security & Compliance already exists, re-using existing session"
+                $Global:SessionSecurityCompliance = New-PSSession -ConfigurationName "Microsoft.Exchange" `
+                    -ConnectionUri https://ps.compliance.protection.outlook.com/powershell-liveid/ `
+                    -Credential $O365Credential `
+                    -Authentication Basic `
+                    -AllowRedirection
+
+                $Global:SCModule = Import-PSSession $Global:SessionSecurityCompliance  `
+                    -ErrorAction SilentlyContinue `
+                    -AllowClobber
+
+                Import-Module $Global:SCModule -Global | Out-Null
+            }
+            return
         }
         'MSOnline'
         {
