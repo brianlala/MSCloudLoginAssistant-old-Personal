@@ -70,22 +70,174 @@ function Test-MSCloudLogin
         }
         'ExchangeOnline'
         {
-            $testCmdlet = "Get-Mailbox";
-            $exceptionStringMFA = "AADSTS";
-            $connectCmdlet = "Connect-EXOPSSession";
-            $connectCmdletArgs = "-Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            $variablePrefix = "exo"
+            $VerbosePreference = 'SilentlyContinue'
+            $WarningPreference = "Continue"
+            $ClosedOrBrokenSessions = Get-PSSession -ErrorAction SilentlyContinue | Where-Object -FilterScript { $_.State -ne 'Opened' }
+            if ($ClosedOrBrokenSessions)
+            {
+                Write-Verbose -Message "Found Existing Unusable Session(s)."
+                foreach ($SessionToBeClosed in $ClosedOrBrokenSessions)
+                {
+                    Write-Verbose -Message "Closing Session: $(($SessionToBeClosed).InstanceId)"
+                    $SessionToBeClosed | Remove-PSSession
+                }
+            }
+
+            $Global:OpenExchangeSession = Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Where-Object -FilterScript { $_.State -eq 'Opened' }
+            if ($null -eq $Global:OpenExchangeSession)
+            {
+                try
+                {
+                    $PowerShellConnections = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+
+                    while ($PowerShellConnections)
+                    {
+                        Write-Verbose -Message "This process is using the following connections in a non-Established state: $($PowerShellConnections | Out-String)"
+                        Write-Verbose -Message "Waiting for closing connections to close..."
+                        Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Remove-PSSession
+                        Start-Sleep -seconds 1
+                        $CheckConnectionsWithoutKillingWhileLoop = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+                        if (-not $CheckConnectionsWithoutKillingWhileLoop)
+                        {
+                            Write-Verbose -Message "Connections have closed.  Waiting 5 more seconds..."
+                            Start-Sleep -seconds 5
+                            $PowerShellConnections = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+                        }
+                    }
+
+                    if ($Global:ExchangeOnlineSession.State -eq "Closed")
+                    {
+                        Remove-PSSession $Global:ExchangeOnlineSession
+                        $Global:ExchangeOnlineSession = $null
+                    }
+
+                    while ($null -eq $Global:ExchangeOnlineSession)
+                    {
+                        Write-Verbose -Message "Creating new EXO Session"
+                        $Global:ExchangeOnlineSession = New-PSSession -Name 'ExchangeOnline' -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $O365Credential -Authentication Basic -AllowRedirection -ErrorAction SilentlyContinue
+
+                        if ($null -eq $Global:ExchangeOnlineSession)
+                        {
+                            Write-Warning "Exceeded max number of connections. Waiting 60 seconds"
+                            Start-Sleep 60
+                        }
+                    }
+
+                    if ($null -eq $Global:ExchangeOnlineModules)
+                    {
+                        Write-Verbose -Message "Importing all commands into the EXO Session"
+                        $Global:ExchangeOnlineModules = Import-PSSession $Global:ExchangeOnlineSession -AllowClobber
+                        Import-Module $Global:ExchangeOnlineModules -Global | Out-Null
+                    }
+                }
+                catch
+                {
+                    $ExceptionMessage = $_.Exception
+                    $Error.Clear()
+                    $VerbosePreference = 'SilentlyContinue'
+                    if ($ExceptionMessage -imatch 'Please wait for [0-9]* seconds')
+                    {
+                        Write-Verbose -Message "Waiting for available runspace..."
+                        [regex]$WaitTimePattern = 'Please wait for [0-9]* seconds'
+                        $WaitTimePatternMatch = (($WaitTimePattern.Match($ExceptionMessage)).Value | Select-String -Pattern '[0-9]*' -AllMatches )
+                        $WaitTimeInSeconds = ($WaitTimePatternMatch | ForEach-Object {$_.Matches} | Where-Object -FilterScript { $_.Value -NotLike $null }).Value
+                        Write-Verbose -Message "Waiting for requested $WaitTimeInSeconds seconds..."
+                        Start-Sleep -Seconds ($WaitTimeInSeconds + 1)
+                        try
+                        {
+                            Write-Verbose -Message "Opening New ExchangeOnline Session."
+                            $PowerShellConnections = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+                            while ($PowerShellConnections)
+                            {
+                                Write-Verbose -Message "This process is using the following connections in a non-Established state: $($PowerShellConnections | Out-String)"
+                                Write-Verbose -Message "Waiting for closing connections to close..."
+                                Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Remove-PSSession
+                                Start-Sleep -seconds 1
+                                $CheckConnectionsWithoutKillingWhileLoop = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+                                if (-not $CheckConnectionsWithoutKillingWhileLoop)
+                                {
+                                    Write-Verbose -Message "Connections have closed.  Waiting 5 more seconds..."
+                                    Start-Sleep -seconds 5
+                                    $PowerShellConnections = Get-NetTCPConnection | Where-Object -FilterScript { $_.OwningProcess -eq $PID -and $_.RemotePort -eq '443' -and $_.State -ne 'Established' }
+                                }
+                            }
+                            $VerbosePreference = 'SilentlyContinue'
+                            $Global:ExchangeOnlineSession = $null
+                            while (-not $Global:ExchangeOnlineSession)
+                            {
+                                $Global:ExchangeOnlineSession = New-PSSession -Name 'ExchangeOnline' -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $O365Credential -Authentication Basic -AllowRedirection -ErrorAction SilentlyContinue
+                            }
+
+                            $Global:ExchangeOnlineModules = Import-PSSession $Global:ExchangeOnlineSession -AllowClobber -ErrorAction SilentlyContinue
+
+                            $ExchangeOnlineModuleImport = Import-Module $ExchangeOnlineModules -Global -ErrorAction SilentlyContinue
+                        }
+                        catch
+                        {
+                            $VerbosePreference = 'SilentlyContinue'
+                            $WarningPreference = "SilentlyContinue"
+                            $Global:ExchangeOnlineSession = $null
+                            Close-SessionsAndReturnError -ExceptionMessage $_.Exception
+                            $Message = "Can't open Exchange Online session from Connect-ExchangeOnline"
+                            New-Office365DSCLogEntry -Error $_ -Message $Message
+                        }
+                    }
+                    else
+                    {
+                        Write-Verbose $_.Exception
+                        $VerbosePreference = 'SilentlyContinue'
+                        Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Remove-PSSession
+                        Write-Verbose -Message "Exchange Online connection failed."
+                        Write-Verbose -Message "Waiting 60 seconds..."
+                        Start-Sleep -Seconds 60
+                        try
+                        {
+                            Write-Verbose -Message "Opening New ExchangeOnline Session."
+                            $VerbosePreference = 'SilentlyContinue'
+                            Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Remove-PSSession -ErrorAction SilentlyContinue
+                            $Global:ExchangeOnlineSession = New-PSSession -Name 'ExchangeOnline' -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $O365Credential -Authentication Basic -AllowRedirection
+                            $Global:ExchangeOnlineModules = Import-PSSession $Global:ExchangeOnlineSession -AllowClobber -ErrorAction SilentlyContinue
+
+                            $ExchangeOnlineModuleImport = Import-Module $ExchangeOnlineModules -Global -ErrorAction SilentlyContinue
+                        }
+                        catch
+                        {
+                            $VerbosePreference = 'SilentlyContinue'
+                            $WarningPreference = "SilentlyContinue"
+                            $Global:ExchangeOnlineSession = $null
+                            Close-SessionsAndReturnError -ExceptionMessage $_.Exception
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Write-Verbose -Message "Using Existing ExchangeOnline Session."
+                $Global:OpenExchangeSession = Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue | Where-Object -FilterScript { $_.State -eq 'Opened' }
+                $VerbosePreference = 'SilentlyContinue'
+                $WarningPreference = "SilentlyContinue"
+            }
+            return
         }
         'SecurityComplianceCenter'
         {
-            # TODO!
-            $testCmdlet = "Get-RetentionCompliancePolicy";
-            $exceptionStringMFA = "AADSTS";
-            $connectCmdlet = "Connect-IPPSSession";
-            $connectCmdletArgs = "-Credential `$o365Credential";
-            $connectCmdletMfaRetryArgs = "-UserPrincipalName `$o365Credential.UserName";
-            $variablePrefix = "scc"
+            $Global:SessionSecurityCompliance = Get-PSSession | Where-Object{$_.ComputerName -like "*.ps.compliance.protection.outlook.com"}
+            if ($null -eq $Global:SessionSecurityCompliance)
+            {
+                Write-Verbose -Message "Session to Security & Compliance already exists, re-using existing session"
+                $Global:SessionSecurityCompliance = New-PSSession -ConfigurationName "Microsoft.Exchange" `
+                    -ConnectionUri https://ps.compliance.protection.outlook.com/powershell-liveid/ `
+                    -Credential $O365Credential `
+                    -Authentication Basic `
+                    -AllowRedirection
+
+                $Global:SCModule = Import-PSSession $Global:SessionSecurityCompliance  `
+                    -ErrorAction SilentlyContinue `
+                    -AllowClobber
+
+                Import-Module $Global:SCModule -Global | Out-Null
+            }
+            return
         }
         'MSOnline'
         {
@@ -131,7 +283,7 @@ function Test-MSCloudLogin
         elseif ($Platform -eq "PnP")
         {
             $CurrentPnPConnection = (Get-PnPConnection).Url
-            if ($CurrentUrl -ne $CurrentPnPConnection)
+            if ($ConnectionUrl -ne $CurrentPnPConnection)
             {
                 throw "PnP requires you to reconnect to new location using $connectCmdlet"
             }
